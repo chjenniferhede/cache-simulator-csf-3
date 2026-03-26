@@ -220,9 +220,9 @@ void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint
             stats.store_hits++;
             slot.access_ts = global_time;
             stats.total_cycles += 1; // Hit takes 1 cycle
-            // If write-through, + cycles
+            // If write-through, we write 4 bytes directly, so 100 cycles
             if (config.write_through) { 
-                stats.total_cycles += 100 * (config.block_size/4);
+                stats.total_cycles += 100;
             } else {
                 slot.dirty = true; // Mark dirty for write-back
             }
