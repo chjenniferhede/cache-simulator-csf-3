@@ -25,10 +25,26 @@ int main(int argc, char* argv[]) {
         // This sets tag = 0, valid = false, dirty = false, load_ts = 0, access_ts = 0 for all slots
     }
 
+    // Initialize the stats
+    Stats stats = {0, 0, 0, 0, 0, 0, 0};
+
     // Run through the operations
+    uint32_t global_time = 0; 
     for (const auto& op : operations) {
         Address addr = decompose_address(op.address, config);
 
+        // Route load vs. store
+        if (op.is_load) {
+            stats.total_loads++;
+            load_address(addr, cache, config, stats, global_time);
+        } else {
+            // Handle store operation
+            // 1. Check if the block is in the cache (hit or miss)
+            // 2. If hit, update stats, mark dirty if write-back, and possibly update LRU/FIFO info
+            // 3. If miss, if write-allocate, load the block into cache and then perform the store; if no-write-allocate, directly write to memory and update stats
+        }
+
+        global_time++; 
     }
 
 }
@@ -133,3 +149,64 @@ Address decompose_address(uint32_t address, Config config) {
 
     return addr;
 }
+
+// Load: Cache structure: Cache -> Set -> Slot
+void load_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time) {
+    // Hit (valid && tag == addr.tag in one of the slots in the set)
+    Set& set = cache.sets[addr.index];
+    for (auto& slot : set.slots) {
+        if (slot.valid && slot.tag == addr.tag) {
+            stats.load_hits++;
+            slot.access_ts = global_time;
+            stats.total_cycles += 1; // Hit takes 1 cycle
+            return;
+        }
+    }
+
+    // Miss
+    stats.total_cycles += 1 + 100 * (config.block_size/4); // load takes 1 and miss search takes 100
+    stats.load_misses++;
+    // Try to find an empty slot first
+    for (auto& slot : set.slots) {
+        if (!slot.valid) {
+            slot.valid = true;
+            slot.tag = addr.tag;
+            slot.dirty = false;
+            slot.load_ts = global_time;
+            slot.access_ts = global_time;
+            return;
+        }
+    }
+    // No empty slot, find which to evict (LRU or FIFO)
+    Slot *evict_slot = &set.slots[0]; // this is pointer 
+    for (auto& slot : set.slots) {
+        if (config.lru) {
+            // Evict the least recently used slot
+            if (slot.access_ts < evict_slot->access_ts) {
+                evict_slot = &slot;
+            }
+        } else {
+            // Evict the first-in slot
+            if (slot.load_ts < evict_slot->load_ts) {
+                evict_slot = &slot;
+            }
+        }
+    }
+    // If the evicted slot is dirty, we need to write it back to memory, so more cycles needed
+    if (evict_slot->dirty) {
+        stats.total_cycles += 100 * (config.block_size/4);
+    } 
+
+    // Evict the slot
+    evict_slot->valid = true;
+    evict_slot->tag = addr.tag;
+    evict_slot->dirty = false;
+    evict_slot->load_ts = global_time;
+    evict_slot->access_ts = global_time;
+}
+
+
+
+
+
+
