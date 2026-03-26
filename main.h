@@ -37,6 +37,7 @@ struct Stats {
 Config validate_and_parse_config(int argc, char* argv[]);
 std::vector<Operation> read_operations();
 Address decompose_address(uint32_t address, Config config);
-
+void load_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time);
+void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time);
 
 #endif // MAIN_H

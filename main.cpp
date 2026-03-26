@@ -38,15 +38,21 @@ int main(int argc, char* argv[]) {
             stats.total_loads++;
             load_address(addr, cache, config, stats, global_time);
         } else {
-            // Handle store operation
-            // 1. Check if the block is in the cache (hit or miss)
-            // 2. If hit, update stats, mark dirty if write-back, and possibly update LRU/FIFO info
-            // 3. If miss, if write-allocate, load the block into cache and then perform the store; if no-write-allocate, directly write to memory and update stats
+            stats.total_stores++;
+            store_address(addr, cache, config, stats, global_time);
         }
 
         global_time++; 
     }
 
+    // Output the stats
+    std::cout << "Total loads: " << stats.total_loads << std::endl;
+    std::cout << "Total stores: " << stats.total_stores << std::endl;
+    std::cout << "Load hits: " << stats.load_hits << std::endl;
+    std::cout << "Load misses: " << stats.load_misses << std::endl;
+    std::cout << "Store hits: " << stats.store_hits << std::endl;
+    std::cout << "Store misses: " << stats.store_misses << std::endl;
+    std::cout << "Total cycles: " << stats.total_cycles << std::endl;
 }
 
 // Helper function to validate and parse the config parameters
@@ -205,8 +211,76 @@ void load_address(Address addr, Cache& cache, Config config, Stats& stats, uint3
     evict_slot->access_ts = global_time;
 }
 
+// Store: Cache structure: Cache -> Set -> Slot
+void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time) {
+    // Hit
+    Set& set = cache.sets[addr.index];
+    for (auto& slot : set.slots) {
+        if (slot.valid && slot.tag == addr.tag) {
+            stats.store_hits++;
+            slot.access_ts = global_time;
+            stats.total_cycles += 1; // Hit takes 1 cycle
+            // If write-through, + cycles
+            if (config.write_through) { 
+                stats.total_cycles += 100 * (config.block_size/4);
+            } else {
+                slot.dirty = true; // Mark dirty for write-back
+            }
+            return;
+        }
+    }
+    // Miss
+    stats.total_cycles += 1; // Miss search takes 1 cycle
+    stats.store_misses++;
 
+    // if write allocate
+    if (config.write_allocate) { 
+        // Try to find an empty slot first
+        for (auto& slot : set.slots) {
+            if (!slot.valid) {
+                slot.valid = true;
+                slot.tag = addr.tag;
+                slot.dirty = !config.write_through; // Mark dirty if write-back
+                slot.load_ts = global_time;
+                slot.access_ts = global_time;
+                stats.total_cycles += 100 * (config.block_size/4); // load takes 100 cycles
+                return;
+            }
+        }
+        // No empty slot, find which to evict (LRU or FIFO)
+        Slot *evict_slot = &set.slots[0]; // this is pointer 
+        for (auto& slot : set.slots) {
+            if (config.lru) {
+                // Evict the least recently used slot
+                if (slot.access_ts < evict_slot->access_ts) {
+                    evict_slot = &slot;
+                }
+            } else {
+                // Evict the first-in slot
+                if (slot.load_ts < evict_slot->load_ts) {
+                    evict_slot = &slot;
+                }
+            }
+        }
+        // If the evicted slot is dirty, we need to write it back to memory, so more cycles needed
+        if (evict_slot->dirty) {
+            stats.total_cycles += 100 * (config.block_size/4);
+        } 
 
+        // Evict the slot and load the new block
+        evict_slot->valid = true;
+        evict_slot->tag = addr.tag;
+        evict_slot->dirty = !config.write_through; // Mark dirty if write-back
+        evict_slot->load_ts = global_time;
+        evict_slot->access_ts = global_time;
+        stats.total_cycles += 100 * (config.block_size/4); // load takes 100 cycles
+
+    // If no write allocate: just take time to write to memory
+    } else {
+        stats.total_cycles += 100;
+    }
+}
+  
 
 
 
