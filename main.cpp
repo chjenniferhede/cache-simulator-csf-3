@@ -243,7 +243,10 @@ void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint
                 slot.dirty = !config.write_through; // Mark dirty if write-back
                 slot.load_ts = global_time;
                 slot.access_ts = global_time;
-                stats.total_cycles += 100 * (config.block_size/4); // load takes 100 cycles
+                stats.total_cycles += 100 * (config.block_size/4); // write allocate takes 100 * (block_size/4) cycles
+                if (config.write_through) { 
+                    stats.total_cycles += 100; // write directly back, also 100 cycles
+                }
                 return;
             }
         }
@@ -266,6 +269,9 @@ void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint
         if (evict_slot->dirty) {
             stats.total_cycles += 100 * (config.block_size/4);
         } 
+        if (config.write_through) { 
+            stats.total_cycles += 100; // the new block also directly back
+        }
 
         // Evict the slot and load the new block
         evict_slot->valid = true;
