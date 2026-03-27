@@ -53,6 +53,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Store hits: " << stats.store_hits << std::endl;
     std::cout << "Store misses: " << stats.store_misses << std::endl;
     std::cout << "Total cycles: " << stats.total_cycles << std::endl;
+    return 0;
 }
 
 // Helper function to validate and parse the config parameters
@@ -87,7 +88,7 @@ Config validate_and_parse_config(int argc, char* argv[]) {
 
     // Now find logical errors
     // Check if num_sets, block_per_set, block_size are positive
-    if (config.num_sets <= 0 || config.block_per_set <= 0 || config.block_size <= 0) {
+    if (config.num_sets == 0 || config.block_per_set == 0 || config.block_size == 0) {
         std::cerr << "Error: num_sets, block_per_set, and block_size must be positive integers." << std::endl;
         exit(1);
     }
@@ -145,7 +146,7 @@ std::vector<Operation> read_operations() {
 }
 
 // Getter to extract Address = {tag, index, and offset}, we can assume address is 32 bit
-Address decompose_address(uint32_t address, Config config) { 
+Address decompose_address(uint32_t address, const Config& config) {
     // Offset needs to be able to represent block_size, so if 
     // block_size is 16 = 4 bits = can represent 0 to 15. 
     Address addr;
@@ -157,7 +158,7 @@ Address decompose_address(uint32_t address, Config config) {
 }
 
 // Load: Cache structure: Cache -> Set -> Slot
-void load_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time) {
+void load_address(Address addr, Cache& cache, const Config& config, Stats& stats, uint32_t global_time) {
     // Hit (valid && tag == addr.tag in one of the slots in the set)
     Set& set = cache.sets[addr.index];
     for (auto& slot : set.slots) {
@@ -212,7 +213,7 @@ void load_address(Address addr, Cache& cache, Config config, Stats& stats, uint3
 }
 
 // Store: Cache structure: Cache -> Set -> Slot
-void store_address(Address addr, Cache& cache, Config config, Stats& stats, uint32_t global_time) {
+void store_address(Address addr, Cache& cache, const Config& config, Stats& stats, uint32_t global_time) {
     // Hit
     Set& set = cache.sets[addr.index];
     for (auto& slot : set.slots) {
